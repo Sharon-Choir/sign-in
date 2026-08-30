@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FBF7FF">
+<title>Choir Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Outfit:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.44.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.16.0/firebase-app-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/12.16.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* ============================================================
+   FIREBASE — project "choir-sign-in".
+   There is deliberately NO authentication here. Nobody signs in.
+   The Firestore rules must allow open read/write on signin/state:
+
+     rules_version = '2';
+     service cloud.firestore {
+       match /databases/{database}/documents {
+         match /signin/state { allow read, write: if true; }
+       }
+     }
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBIwh58qIK9UcrUC7Z2LJpv4qZPlVpefyw",
+  authDomain: "choir-sign-in.firebaseapp.com",
+  projectId: "choir-sign-in",
+  storageBucket: "choir-sign-in.firebasestorage.app",
+  messagingSenderId: "723096268750",
+  appId: "1:723096268750:web:b60288a6c85265994d859f"
+};
+
+let fbReady = false, db = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  fbReady = true;
+  /* Queue writes locally when the connection drops and replay them when it
+     comes back, instead of silently losing them. Also serves the last known
+     roster from disk so a rehearsal can keep scanning through a wifi blip.
+     Fails harmlessly if the browser won't allow it (private mode, or the
+     site open in several tabs at once). */
+  db.enablePersistence({ synchronizeTabs:true }).catch(function(){});
+}catch(e){ console.error('Firebase init failed', e); }
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#FBF7FF;
+  --card:#FFFFFF;
+  --ink:#2B2340;
+  --muted:#7B7292;
+  --line:#EBE3F5;
+  --line-2:#DCD1EC;
+
+  --plum:#5B3E96;
+  --plum-soft:#EDE6FB;
+  --blush:#FF8FA3;
+  --blush-soft:#FFEDF1;
+  --mint:#2E9E7E;
+  --mint-soft:#E4F7F0;
+  --butter:#B5820A;
+  --butter-soft:#FFF4DC;
+  --rouge:#C4425A;
+  --rouge-soft:#FDE9ED;
+
+  --r-sm:10px; --r:14px; --r-lg:20px; --r-xl:26px;
+  --shadow:0 1px 2px rgba(43,35,64,.04), 0 8px 24px -12px rgba(43,35,64,.18);
+  --font:"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --display:"Baloo 2","Outfit",system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--font);font-size:16px;-webkit-text-size-adjust:100%}
+body{min-height:100dvh}
+h1,h2,h3,.display{font-family:var(--display);font-weight:600;letter-spacing:-.01em}
+button,input,select,textarea{font-family:inherit;font-size:16px;color:inherit}
+button{cursor:pointer}
+a{color:var(--plum)}
+:focus-visible{outline:2.5px solid var(--blush);outline-offset:2px;border-radius:6px}
+[hidden]{display:none!important}
+
+/* ---------- signature: barcode rule ---------- */
+.barcode-rule{height:7px;width:100%;border-radius:99px;overflow:hidden;
+  background:repeating-linear-gradient(90deg,
+    var(--plum) 0 3px, transparent 3px 6px,
+    var(--blush) 6px 8px, transparent 8px 13px,
+    var(--plum) 13px 14px, transparent 14px 18px,
+    var(--mint) 18px 21px, transparent 21px 24px,
+    var(--plum) 24px 28px, transparent 28px 31px,
+    var(--blush) 31px 32px, transparent 32px 37px);
+  opacity:.8}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:11px 16px;border-radius:99px;border:1.5px solid var(--line-2);
+  background:var(--card);color:var(--ink);font-weight:500;font-size:15px;
+  transition:transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease}
+.btn:hover{border-color:var(--plum);color:var(--plum)}
+.btn:active{transform:translateY(1px)}
+.btn i{font-size:17px}
+.btn-primary{background:var(--plum);border-color:var(--plum);color:#fff;box-shadow:0 6px 16px -8px var(--plum)}
+.btn-primary:hover{background:#4c3283;border-color:#4c3283;color:#fff}
+.btn-blush{background:var(--blush);border-color:var(--blush);color:#5a1f2c}
+.btn-blush:hover{background:#ff7d94;border-color:#ff7d94;color:#5a1f2c}
+.btn-sm{padding:7px 12px;font-size:13.5px;border-radius:99px}
+.btn-icon{padding:8px;width:36px;height:36px;border-radius:12px}
+.btn-danger:hover{border-color:var(--rouge);color:var(--rouge)}
+.btn:disabled{opacity:.45;pointer-events:none}
+
+/* ---------- fields ---------- */
+.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.field label,.lbl{font-size:12.5px;font-weight:500;color:var(--muted);letter-spacing:.01em}
+input[type=text],input[type=number],input[type=password],select,textarea{
+  width:100%;padding:11px 13px;border-radius:var(--r);border:1.5px solid var(--line-2);
+  background:var(--card);font-size:16px;transition:border-color .12s, box-shadow .12s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--plum);box-shadow:0 0 0 3px var(--plum-soft)}
+select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237B7292' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center;padding-right:36px}
+textarea{line-height:1.5;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+
+/* ---------- app shell ---------- */
+#app{max-width:1080px;margin:0 auto;padding-bottom:60px}
+.topbar{position:sticky;top:0;z-index:40;background:rgba(251,247,255,.92);backdrop-filter:blur(12px);
+  border-bottom:1.5px solid var(--line);padding:12px 16px}
+.topbar-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.brand-mark{width:38px;height:38px;flex:none;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--plum-soft),var(--blush-soft));border:1.5px solid var(--line)}
+.brand-mark i{font-size:19px;color:var(--plum)}
+.brand-txt{min-width:0}
+.brand-name{font-family:var(--display);font-weight:600;font-size:17px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who{display:flex;align-items:center;gap:8px;flex:none}
+.status-chip{display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:99px;
+  background:var(--card);border:1.5px solid var(--line-2);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.status-chip i{font-size:15px}
+.status-chip.ok i{color:var(--mint)}
+.status-chip.off i{color:var(--butter)}
+.status-chip.bad i{color:var(--rouge)}
+
+/* tabs */
+.tabs{display:flex;gap:6px;padding:10px 16px 0;max-width:1080px;margin:0 auto;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{position:relative;display:flex;align-items:center;gap:7px;padding:9px 15px;border:1.5px solid transparent;background:none;
+  border-radius:99px;font-size:14px;font-weight:500;color:var(--muted);white-space:nowrap}
+.tab i{font-size:17px}
+.tab:hover{color:var(--ink)}
+.tab.on{background:var(--card);border-color:var(--line-2);color:var(--plum);box-shadow:var(--shadow)}
+
+.wrap{padding:16px}
+.panel{display:none}
+.panel.on{display:block;animation:rise .22s ease}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r-lg);padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card-t{font-family:var(--display);font-weight:600;font-size:16.5px;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+.card-t i{color:var(--plum);font-size:19px}
+.card-d{font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.card-d:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:820px){.grid2{grid-template-columns:1fr 1fr}.grid2 .card{margin-bottom:0}}
+
+/* ---------- notes / pills ---------- */
+.note{display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:var(--r);font-size:13.5px;line-height:1.5;border:1.5px solid}
+.note i{font-size:17px;flex:none;margin-top:1px}
+.note+.note,.note.mt{margin-top:10px}
+.n-info{background:var(--plum-soft);border-color:#DCCFF6;color:#4A3182}
+.n-ok{background:var(--mint-soft);border-color:#BCE9DA;color:#1D6E58}
+.n-warn{background:var(--butter-soft);border-color:#F3DEA9;color:#8A6207}
+.n-err{background:var(--rouge-soft);border-color:#F6C5CF;color:#9E2E44}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.p-in{background:var(--mint-soft);color:var(--mint)}
+.p-out{background:var(--butter-soft);color:var(--butter)}
+.p-mut{background:var(--paper);color:var(--muted);border:1px solid var(--line-2)}
+.p-plum{background:var(--plum-soft);color:#4A3182}
+
+/* ---------- lists / tables ---------- */
+.list{max-height:460px;overflow-y:auto;margin:0 -6px;padding:0 6px}
+.item{display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.item-main{flex:1;min-width:0}
+.item-t{font-size:14.5px;font-weight:500;line-height:1.3}
+.item-s{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+code,.mono{font-family:var(--mono);font-size:12.5px;background:var(--plum-soft);color:#4A3182;padding:2px 7px;border-radius:7px;white-space:nowrap}
+.empty{padding:34px 18px;text-align:center;color:var(--muted);font-size:14px;line-height:1.6}
+.empty i{font-size:30px;display:block;margin-bottom:10px;opacity:.4;color:var(--plum)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:14px}
+.metric{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);padding:14px 10px;text-align:center;box-shadow:var(--shadow)}
+.metric i{font-size:18px;color:var(--plum);display:block;margin-bottom:5px}
+.metric b{display:block;font-family:var(--display);font-size:23px;font-weight:600;line-height:1}
+.metric span{font-size:11px;color:var(--muted);display:block;margin-top:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:6px 13px;border-radius:99px;border:1.5px solid var(--line-2);background:var(--card);font-size:13px;color:var(--muted);font-weight:500}
+.chip.on{background:var(--plum-soft);border-color:#DCCFF6;color:#4A3182}
+.check{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14.5px}
+.check:last-child{border-bottom:none}
+.check input{width:17px;height:17px;accent-color:var(--plum);flex:none;cursor:pointer}
+.check .cn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- admin sub-nav ---------- */
+.subnav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.subnav button{display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:99px;
+  border:1.5px solid var(--line-2);background:var(--card);font-size:14px;font-weight:500;color:var(--muted)}
+.subnav button i{font-size:17px}
+.subnav button:hover{color:var(--ink);border-color:var(--plum)}
+.subnav button.on{background:var(--plum);border-color:var(--plum);color:#fff;box-shadow:0 6px 16px -8px var(--plum)}
+.sub{display:none}
+.sub.on{display:block}
+
+/* ---------- lock screen ---------- */
+.lock{max-width:420px;margin:40px auto;text-align:center}
+.lock-mark{width:70px;height:70px;margin:0 auto 16px;border-radius:24px;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--plum-soft),var(--blush-soft));border:1.5px solid var(--line)}
+.lock-mark i{font-size:34px;color:var(--plum)}
+.lock h2{font-size:25px;margin-bottom:6px}
+.lock .card-d{margin-bottom:18px}
+#code-input{text-align:center;font-family:var(--mono);font-size:26px;letter-spacing:.4em;padding:14px 13px 14px 20px}
+
+/* ---------- student scan screen ---------- */
+.scan-card{text-align:center;padding:26px 22px}
+.scan-mark{width:76px;height:76px;margin:0 auto 14px;border-radius:26px;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--plum-soft),var(--blush-soft));border:1.5px solid var(--line)}
+.scan-mark i{font-size:38px;color:var(--plum)}
+.scan-card h2{font-size:26px;line-height:1.15;margin-bottom:6px}
+.scan-sub{color:var(--muted);font-size:15px;line-height:1.5;max-width:420px;margin:0 auto 20px}
+#scan-input{max-width:340px;margin:0 auto;text-align:center;font-family:var(--mono);font-size:24px;letter-spacing:.22em;padding:14px 13px}
+.scan-hint{font-size:12.5px;color:var(--muted);margin-top:12px}
+.result{margin-top:18px;border-radius:var(--r-lg);border:1.5px solid;padding:22px 20px;display:flex;
+  gap:16px;align-items:center;text-align:left;animation:pop .22s ease}
+.result .ricon{width:56px;height:56px;flex:none;border-radius:20px;display:grid;place-items:center;font-size:30px}
+.result .rname{font-family:var(--display);font-weight:600;font-size:24px;line-height:1.15}
+.result .rsub{font-size:14.5px;margin-top:4px;opacity:.9}
+.r-ok{background:var(--mint-soft);border-color:#BCE9DA;color:#1D6E58}
+.r-ok .ricon{background:#fff;color:var(--mint)}
+.r-warn{background:var(--butter-soft);border-color:#F3DEA9;color:#8A6207}
+.r-warn .ricon{background:#fff;color:var(--butter)}
+.r-err{background:var(--rouge-soft);border-color:#F6C5CF;color:#9E2E44}
+.r-err .ricon{background:#fff;color:var(--rouge)}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+
+/* kiosk */
+body.kiosk .topbar,body.kiosk .tabs,body.kiosk .kiosk-hide{display:none!important}
+body.kiosk #app{max-width:820px;padding-top:5vh}
+body.kiosk .scan-card{padding:40px 30px}
+body.kiosk .scan-card h2{font-size:36px}
+body.kiosk .scan-sub{font-size:17px}
+body.kiosk #scan-input{font-size:30px;max-width:400px}
+body.kiosk .result .rname{font-size:30px}
+.kiosk-exit{position:fixed;right:16px;bottom:16px;z-index:60;display:none}
+body.kiosk .kiosk-exit{display:inline-flex}
+
+/* ---------- modal / toast ---------- */
+.ov{position:fixed;inset:0;background:rgba(43,35,64,.46);backdrop-filter:blur(3px);display:grid;place-items:center;z-index:200;padding:18px}
+.modal{background:var(--card);border-radius:var(--r-xl);padding:24px;max-width:440px;width:100%;
+  box-shadow:0 24px 60px -20px rgba(43,35,64,.5);max-height:88dvh;overflow-y:auto}
+.modal h3{font-size:19px;margin-bottom:7px}
+.modal p{font-size:14.5px;color:var(--muted);line-height:1.55}
+.modal-acts{display:flex;gap:9px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+#toasts{position:fixed;left:12px;right:12px;bottom:20px;z-index:300;
+  display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{pointer-events:auto;max-width:460px;width:100%;background:var(--ink);color:#FBF7FF;padding:13px 16px;
+  border-radius:var(--r);font-size:14.5px;line-height:1.45;display:flex;gap:10px;align-items:flex-start;
+  box-shadow:0 14px 34px -12px rgba(43,35,64,.7);animation:pop .2s ease}
+.toast i{font-size:19px;flex:none;margin-top:1px}
+.toast.ok i{color:#7FE3C4}.toast.err i{color:#FFA3B4}.toast.warn i{color:#FFD98A}
+.toast b{font-weight:600}
+
+/* label preview */
+.lbl-prev{display:flex;flex-wrap:wrap;gap:9px}
+.lbl-card{border:1.5px dashed var(--line-2);border-radius:10px;background:#fff;width:1.75in;height:.5in;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:1px 3px}
+.lbl-card .ln{font:4.6pt/1 var(--mono);color:#333}
+.lbl-card .lname{font:600 4.6pt/1.1 var(--font);color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:1px}
+#printframe{position:fixed;width:0;height:0;border:0;left:-9999px}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="brand">
+        <div class="brand-mark"><i class="ti ti-user-check"></i></div>
+        <div class="brand-txt">
+          <div class="brand-name">Choir Sign In</div>
+          <div class="brand-sub" id="brand-sub">Sharon High School</div>
+        </div>
+      </div>
+      <div class="who">
+        <div class="status-chip" id="conn"><i class="ti ti-cloud"></i><span id="conn-txt">Connecting…</span></div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist">
+    <button class="tab on" id="tab-student" onclick="go('student')" role="tab"><i class="ti ti-scan"></i><span>Student</span></button>
+    <button class="tab" id="tab-admin" onclick="go('admin')" role="tab"><i class="ti ti-shield-lock"></i><span>Admin</span></button>
+  </nav>
+
+  <div class="wrap">
+    <div id="fb-warn" class="note n-warn" style="margin-bottom:14px" hidden>
+      <i class="ti ti-alert-triangle"></i><span id="fb-warn-msg"></span>
+    </div>
+
+    <!-- ════════════════ STUDENT ════════════════ -->
+    <section id="p-student" class="panel on" role="tabpanel">
+      <div class="card scan-card">
+        <div class="scan-mark"><i class="ti ti-scan"></i></div>
+        <h2>Scan your barcode</h2>
+        <div class="scan-sub">Point the scanner at your card. Your name will appear below and the next person can go.</div>
+        <input type="text" id="scan-input" placeholder="00000" autocomplete="off" autocapitalize="off"
+               spellcheck="false" inputmode="numeric" aria-label="Scan your barcode">
+        <div class="scan-hint">The scanner types the number for you — just leave this box selected.</div>
+        <div id="scan-result"></div>
+      </div>
+      <div class="row kiosk-hide" style="justify-content:center">
+        <button class="btn btn-sm" onclick="enterKiosk()"><i class="ti ti-maximize"></i> Kiosk mode</button>
+      </div>
+    </section>
+
+    <!-- ════════════════ ADMIN ════════════════ -->
+    <section id="p-admin" class="panel" role="tabpanel">
+
+      <!-- locked -->
+      <div id="admin-lock" class="lock">
+        <div class="lock-mark"><i class="ti ti-lock"></i></div>
+        <h2 class="display">Admin code</h2>
+        <div class="card-d">Enter the code to manage the roster, print barcodes and see who's here.</div>
+        <div class="field" style="margin-bottom:14px">
+          <input type="password" id="code-input" placeholder="••••" autocomplete="off" inputmode="numeric"
+                 onkeydown="if(event.key==='Enter')tryUnlock()">
+        </div>
+        <button class="btn btn-primary" onclick="tryUnlock()" style="width:100%"><i class="ti ti-lock-open"></i> Unlock</button>
+        <div id="code-msg"></div>
+        <div class="barcode-rule" style="margin-top:22px"></div>
+      </div>
+
+      <!-- unlocked -->
+      <div id="admin-body" hidden>
+        <div class="subnav">
+          <button id="sn-signins" class="on" onclick="goSub('signins')"><i class="ti ti-list-check"></i> Who's here</button>
+          <button id="sn-roster"  onclick="goSub('roster')"><i class="ti ti-users"></i> Roster</button>
+          <button id="sn-labels"  onclick="goSub('labels')"><i class="ti ti-barcode"></i> Create barcodes</button>
+          <button id="sn-settings" onclick="goSub('settings')"><i class="ti ti-settings"></i> Settings</button>
+          <button onclick="lockAdmin()" style="margin-left:auto"><i class="ti ti-lock"></i> Lock</button>
+        </div>
+
+        <!-- ──────── WHO'S HERE ──────── -->
+        <div id="s-signins" class="sub on">
+          <div class="metrics" id="si-metrics"></div>
+          <div class="card">
+            <div class="card-t"><i class="ti ti-list-check"></i> Who's signed in</div>
+            <div class="card-d">Everyone on the roster, with the time they scanned. Click a row to sign someone in or out by hand.</div>
+
+            <div class="card-d" style="margin-bottom:6px">Group</div>
+            <div class="chips" id="si-groups" style="margin-bottom:12px"></div>
+
+            <div class="card-d" style="margin-bottom:6px">Sort by</div>
+            <div class="chips" style="margin-bottom:12px">
+              <button class="chip on" id="sort-name" onclick="setSort('name')"><i class="ti ti-sort-a-z"></i> Alphabetical</button>
+              <button class="chip" id="sort-time" onclick="setSort('time')"><i class="ti ti-clock"></i> Time checked in</button>
+            </div>
+
+            <input type="text" id="si-search" placeholder="Search names…" oninput="renderSignins()" style="margin-bottom:14px">
+            <div id="si-list" class="list"></div>
+
+            <div class="row" style="margin-top:16px">
+              <button class="btn" onclick="exportSignins()"><i class="ti ti-file-spreadsheet"></i> Export spreadsheet</button>
+              <button class="btn btn-danger" onclick="clearSignins()"><i class="ti ti-eraser"></i> Clear sign-ins</button>
+            </div>
+            <div class="note n-info mt"><i class="ti ti-info-circle"></i><span>Clearing sets everyone back to signed out. There's no history afterwards, so export first if you want the record.</span></div>
+          </div>
+        </div>
+
+        <!-- ──────── ROSTER ──────── -->
+        <div id="s-roster" class="sub">
+          <div class="card">
+            <div class="card-t"><i class="ti ti-users-group"></i> Groups</div>
+            <div class="card-d">A student can be in as many groups as you like — they still get one barcode and appear once in the sign-in list.</div>
+            <div class="chips" id="grp-chips" style="margin-bottom:14px"></div>
+            <div class="row">
+              <div class="field" style="flex:2"><label for="new-group">New group name</label>
+                <input type="text" id="new-group" placeholder="e.g. Concert Choir" onkeydown="if(event.key==='Enter')addGroup()"></div>
+              <button class="btn btn-primary" onclick="addGroup()"><i class="ti ti-plus"></i> Create group</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-t"><i class="ti ti-clipboard-text"></i> Import names</div>
+            <div class="card-d">Paste a plain list, one person per line, in the form <b>Last name, First name</b>. Anyone already holding a barcode is skipped — they keep the number they have.</div>
+            <div class="field" style="margin-bottom:12px">
+              <label for="imp-text">Names</label>
+              <textarea id="imp-text" rows="9" placeholder="Agarwal, Eesha&#10;Doe, John&#10;Smith, Maria"></textarea>
+            </div>
+            <div class="card-d" style="margin-bottom:6px">Add them to these groups (optional)</div>
+            <div class="chips" id="imp-groups" style="margin-bottom:14px"></div>
+            <div class="row">
+              <button class="btn btn-primary" onclick="previewImport()"><i class="ti ti-eye"></i> Preview import</button>
+              <button class="btn btn-sm" onclick="clearImport()"><i class="ti ti-eraser"></i> Clear</button>
+            </div>
+            <div id="imp-preview"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-t"><i class="ti ti-user-circle"></i> Everyone on the roster</div>
+            <div class="card-d">Each name is locked to its barcode number. Deleting someone releases their number for a future import.</div>
+            <div class="chips" id="ros-groups" style="margin-bottom:12px"></div>
+            <input type="text" id="ros-search" placeholder="Search names…" oninput="renderRoster()" style="margin-bottom:14px">
+            <div id="ros-list" class="list"></div>
+            <div class="row" style="margin-top:16px">
+              <button class="btn btn-danger" onclick="deleteAllStudents()"><i class="ti ti-trash"></i> Delete everyone</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──────── LABELS ──────── -->
+        <div id="s-labels" class="sub">
+          <div class="card">
+            <div class="card-t"><i class="ti ti-barcode"></i> Choose who gets a barcode</div>
+            <div class="card-d">Pick the students you need cards for. Sheets are sized for 1.75″ × 0.5″ labels, 80 to a page — the same stock as the score library.</div>
+            <div class="chips" id="lb-groups" style="margin-bottom:12px"></div>
+            <input type="text" id="lb-search" placeholder="Search names…" oninput="renderPicker()" style="margin-bottom:12px">
+            <div class="row" style="margin-bottom:12px">
+              <button class="btn btn-sm" onclick="pickAll(true)"><i class="ti ti-checks"></i> Select all shown</button>
+              <button class="btn btn-sm" onclick="pickAll(false)"><i class="ti ti-square"></i> Select none</button>
+              <span id="lb-count" style="font-size:13px;color:var(--muted);align-self:center"></span>
+            </div>
+            <div id="lb-list" class="list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-t"><i class="ti ti-printer"></i> Print the sheet</div>
+            <div class="row">
+              <div class="field" style="max-width:180px">
+                <label for="lb-start">Start at label position</label>
+                <input type="number" id="lb-start" value="1" min="1" max="80" oninput="renderLabelSummary()">
+              </div>
+              <div class="field" style="max-width:150px"><label for="lb-offx">Nudge right (in)</label><input type="number" id="lb-offx" value="0" step="0.02"></div>
+              <div class="field" style="max-width:150px"><label for="lb-offy">Nudge down (in)</label><input type="number" id="lb-offy" value="0" step="0.02"></div>
+            </div>
+            <div class="card-d" style="margin:10px 0 0">Position 1 is the top-left label. Bump it up if you're reusing a partly-peeled sheet. The nudge fields shift everything a hair if your printer runs off-centre.</div>
+            <div id="lb-summary"></div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn btn-primary" onclick="printLabels()"><i class="ti ti-printer"></i> Print sheets</button>
+              <button class="btn" onclick="downloadLabels()"><i class="ti ti-download"></i> Download instead</button>
+            </div>
+            <div class="note n-warn mt"><i class="ti ti-alert-triangle"></i><span>In the print dialog set <b>Scale: 100%</b> (or "Actual size") and <b>Margins: None</b>, or the labels will drift off the sticker grid.</span></div>
+          </div>
+
+          <div class="card" id="lb-prev-card" hidden>
+            <div class="card-t"><i class="ti ti-eye"></i> Preview <span id="lb-prev-count" style="font-weight:400;font-size:13px;color:var(--muted)"></span></div>
+            <div class="lbl-prev" id="lb-prev-grid"></div>
+          </div>
+        </div>
+
+        <!-- ──────── SETTINGS ──────── -->
+        <div id="s-settings" class="sub">
+          <div class="grid2">
+            <div class="card">
+              <div class="card-t"><i class="ti ti-key"></i> Admin code</div>
+              <div class="card-d">Changing it here changes it on every computer that opens this page.</div>
+              <div class="field" style="margin-bottom:10px"><label for="cc-old">Current code</label>
+                <input type="password" id="cc-old" autocomplete="off" inputmode="numeric"></div>
+              <div class="field" style="margin-bottom:10px"><label for="cc-new">New code</label>
+                <input type="password" id="cc-new" autocomplete="off" inputmode="numeric"></div>
+              <div class="field" style="margin-bottom:14px"><label for="cc-new2">New code again</label>
+                <input type="password" id="cc-new2" autocomplete="off" inputmode="numeric"
+                       onkeydown="if(event.key==='Enter')changeCode()"></div>
+              <button class="btn btn-primary" onclick="changeCode()"><i class="ti ti-check"></i> Change code</button>
+              <div class="note n-warn mt"><i class="ti ti-alert-triangle"></i><span>This is a convenience gate, not real security. Anyone who knows the address could reach the data directly — don't put anything sensitive in here.</span></div>
+            </div>
+
+            <div class="card">
+              <div class="card-t"><i class="ti ti-database-export"></i> Backup</div>
+              <div class="card-d">Downloads the whole thing — roster, barcode numbers, groups and current sign-ins — as one file. Restoring replaces everything currently stored.</div>
+              <div class="row">
+                <button class="btn" onclick="backupDownload()"><i class="ti ti-download"></i> Download backup</button>
+                <button class="btn btn-danger" onclick="document.getElementById('restore-file').click()"><i class="ti ti-upload"></i> Restore from file</button>
+                <input type="file" id="restore-file" accept="application/json,.json" hidden onchange="backupRestore(this)">
+              </div>
+              <div class="note n-info mt"><i class="ti ti-info-circle"></i><span>Worth doing after any big import, and at the start of each year.</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-t"><i class="ti ti-info-circle"></i> About</div>
+            <div class="card-d" id="about-text"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<button class="btn kiosk-exit" onclick="exitKiosk()"><i class="ti ti-minimize"></i> Exit kiosk</button>
+<div id="toasts"></div>
+<iframe id="printframe" title="print"></iframe>
+
+<script>
+'use strict';
+
+/* ═══════════════════ STATE ═══════════════════ */
+let S = { students:[], groups:[], signins:[], adminCode:'0000' };
+/* students: [{ id, name:"Last, First", num:1..99999, groups:[groupId] }]
+   groups:   [{ id, name }]
+   signins:  [{ id:studentId, at:ISO, manual:bool }]  — present people only
+
+   signins is deliberately an ARRAY, not a map keyed by student. Firestore's
+   merge:true writes deep-merge nested maps, so a removed key would survive on
+   the server and a cleared sign-in would come straight back on the next
+   snapshot. Arrays are replaced wholesale by a merge write, so clearing
+   actually clears. */
+
+let tab = 'student';
+let sub = 'signins';
+let unlocked = false;
+let sortMode = 'name';
+let siGroup = 'all', rosGroup = 'all', lbGroup = 'all';
+let impGroups = new Set();
+let picked = new Set();
+let pendingImport = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const norm = s => String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+const code5 = n => String(n).padStart(5,'0');
+
+/* "Last, First" is the stored, sortable form. First Last is only ever shown
+   on the scan confirmation, where a student is reading their own name. */
+function firstLast(n){
+  if(!n) return '';
+  const i = n.indexOf(',');
+  if(i === -1) return n.trim();
+  const last = n.slice(0,i).trim(), first = n.slice(i+1).trim();
+  return first ? (first + ' ' + last) : last;
+}
+function tidyName(raw){
+  const s = String(raw||'').trim().replace(/\s+/g,' ');
+  if(!s) return '';
+  const i = s.indexOf(',');
+  if(i === -1) return s;
+  const last = s.slice(0,i).trim(), first = s.slice(i+1).trim().replace(/^,+\s*/,'');
+  return first ? (last + ', ' + first) : last;
+}
+function fmtTime(iso){
+  if(!iso) return '—';
+  try{ return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+/* ── sign-in record helpers ── */
+function findSignin(id){
+  for(let i=0;i<S.signins.length;i++) if(S.signins[i].id === id) return S.signins[i];
+  return null;
+}
+function setSignin(id, manual){
+  const rec = findSignin(id);
+  if(rec){ rec.at = new Date().toISOString(); rec.manual = !!manual; return rec; }
+  const fresh = { id:id, at:new Date().toISOString(), manual:!!manual };
+  S.signins.push(fresh);
+  return fresh;
+}
+function removeSignin(id){
+  S.signins = S.signins.filter(function(r){ return r.id !== id; });
+}
+
+function fmtDateTime(iso){
+  if(!iso) return '';
+  try{ return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+
+/* ═══════════════════ TOASTS & MODALS ═══════════════════ */
+function toast(msg, kind, ms){
+  kind = kind || 'ok'; ms = ms || 3600;
+  const icons = {ok:'ti-circle-check', err:'ti-alert-circle', warn:'ti-alert-triangle', info:'ti-info-circle'};
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.innerHTML = '<i class="ti ' + (icons[kind]||icons.ok) + '"></i><div>' + msg + '</div>';
+  $('toasts').appendChild(el);
+  setTimeout(function(){ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(function(){ el.remove(); },320); }, ms);
+}
+
+function confirmBox(msg, okLabel){
+  okLabel = okLabel || 'Confirm';
+  return new Promise(function(res){
+    const ov = document.createElement('div'); ov.className='ov';
+    ov.innerHTML = '<div class="modal"><h3>Just checking</h3><p style="white-space:pre-line">' + esc(msg) + '</p>' +
+      '<div class="modal-acts"><button class="btn" data-x>Cancel</button>' +
+      '<button class="btn btn-primary" data-y>' + esc(okLabel) + '</button></div></div>';
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); res(v); focusScan(); };
+    ov.querySelector('[data-x]').onclick = function(){ done(false); };
+    ov.querySelector('[data-y]').onclick = function(){ done(true); };
+    ov.onclick = function(e){ if(e.target===ov) done(false); };
+  });
+}
+
+function promptBox(title, defVal, opts){
+  opts = opts || {};
+  return new Promise(function(res){
+    const ov = document.createElement('div'); ov.className='ov';
+    ov.innerHTML = '<div class="modal"><h3>' + esc(title) + '</h3>' +
+      (opts.note ? '<p style="margin-top:8px">' + esc(opts.note) + '</p>' : '') +
+      '<div class="field" style="margin-top:12px"><input type="' + (opts.password?'password':'text') + '" id="pb-input" value="' + esc(defVal||'') + '"></div>' +
+      '<div class="modal-acts"><button class="btn" data-x>Cancel</button>' +
+      '<button class="btn btn-primary" data-y>' + esc(opts.ok || 'Save') + '</button></div></div>';
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#pb-input');
+    setTimeout(function(){ inp.focus(); inp.select(); }, 60);
+    const done = v => { ov.remove(); res(v); focusScan(); };
+    ov.querySelector('[data-x]').onclick = function(){ done(null); };
+    ov.querySelector('[data-y]').onclick = function(){ done(inp.value.trim()); };
+    inp.onkeydown = function(e){
+      if(e.key==='Enter') done(inp.value.trim());
+      if(e.key==='Escape') done(null);
+    };
+    ov.onclick = function(e){ if(e.target===ov) done(null); };
+  });
+}
+
+/* ═══════════════════ FIRESTORE ═══════════════════ */
+const DOC = () => db.collection('signin').doc('state');
+let saving = false;
+/* Nothing may be written until the stored data has actually arrived. Without
+   this, any action taken during a slow first load would write the app's blank
+   starting state straight over the real roster. */
+let loaded = false;
+
+function setConn(kind, text){
+  const el = $('conn');
+  el.className = 'status-chip ' + kind;
+  const icons = { ok:'ti-cloud-check', off:'ti-cloud-off', bad:'ti-cloud-x', '':'ti-cloud' };
+  el.querySelector('i').className = 'ti ' + (icons[kind] || 'ti-cloud');
+  $('conn-txt').textContent = text;
+}
+
+async function save(){
+  if(!fbReady || !db) return false;
+  if(!loaded){
+    console.warn('Save blocked: data has not finished loading yet.');
+    toast('Still loading — give it a second and try again.', 'warn', 4000);
+    return false;
+  }
+  try{
+    saving = true;
+    /* merge:true writes only these fields rather than replacing the whole
+       document, so two computers saving at once can't wipe each other. */
+    await DOC().set({
+      students:S.students, groups:S.groups, signins:S.signins, adminCode:S.adminCode
+    }, { merge:true });
+    return true;
+  }catch(e){
+    console.error('Save failed', e);
+    toast('Couldn\'t save that — check the connection and try again.', 'err', 5000);
+    return false;
+  }finally{ saving = false; }
+}
+
+/* Apply a change locally, then keep it only if the save actually went
+   through. A failed write rolls the screen back rather than showing a change
+   that was never stored. */
+async function commit(mutate){
+  const before = JSON.stringify({ students:S.students, groups:S.groups, signins:S.signins, adminCode:S.adminCode });
+  mutate();
+  const ok = await save();
+  if(!ok){
+    const snap = JSON.parse(before);
+    S.students = snap.students; S.groups = snap.groups; S.signins = snap.signins; S.adminCode = snap.adminCode;
+  }
+  return ok;
+}
+
+function migrate(){
+  if(!Array.isArray(S.students)) S.students = [];
+  if(!Array.isArray(S.groups)) S.groups = [];
+  /* Older data stored sign-ins as a map keyed by student id. Convert it. */
+  if(S.signins && !Array.isArray(S.signins) && typeof S.signins === 'object'){
+    S.signins = Object.keys(S.signins).map(function(id){
+      const r = S.signins[id] || {};
+      return { id:id, at:r.at || null, manual:!!r.manual };
+    });
+  }
+  if(!Array.isArray(S.signins)) S.signins = [];
+  const seen = new Set();
+  S.students.forEach(function(st){
+    if(!Array.isArray(st.groups)) st.groups = [];
+    st.groups = st.groups.filter(function(g){ return S.groups.some(function(x){ return x.id===g; }); });
+    if(typeof st.num !== 'number' || st.num < 1 || seen.has(st.num)) st.num = null;
+    else seen.add(st.num);
+  });
+  /* Anything without a valid number (old or corrupted data) gets the lowest
+     free one rather than being left unscannable. */
+  S.students.filter(function(st){ return st.num === null; }).forEach(function(st){
+    st.num = freeNums(1)[0];
+  });
+  /* Sign-in entries pointing at deleted students are dead weight, and a
+     duplicate entry for one student would show them twice. */
+  const keep = new Set();
+  S.signins = S.signins.filter(function(r){
+    if(!r || !r.id || keep.has(r.id)) return false;
+    if(!S.students.some(function(st){ return st.id===r.id; })) return false;
+    keep.add(r.id);
+    return true;
+  });
+}
+
+function listen(){
+  if(!fbReady || !db){
+    setConn('bad','Not connected');
+    showWarn('Not connected to the database — nothing will save. Check the Firebase config in this file.');
+    return;
+  }
+  DOC().onSnapshot({ includeMetadataChanges:true }, function(snap){
+    /* A missing document after we've already loaded real data is a transient
+       blip, not a deletion. Keep what we have rather than blanking the app
+       and, worse, saving that blank back. */
+    if(!snap.exists && loaded) return;
+    const d = snap.exists ? snap.data() : {};
+    S.students  = d.students  || [];
+    S.groups    = d.groups    || [];
+    S.signins   = d.signins   || [];
+    S.adminCode = d.adminCode || '0000';
+    loaded = true;
+    $('fb-warn').hidden = true;
+    migrate();
+    setConn(snap.metadata.fromCache ? 'off' : 'ok',
+            snap.metadata.fromCache ? 'Offline — saved locally' : 'Saved to the cloud');
+    paint();
+  }, function(err){
+    console.error(err);
+    setConn('bad','Connection problem');
+    showWarn('Couldn\'t reach the database. Check the Firestore rules for the choir-sign-in project.');
+  });
+}
+
+function showWarn(msg){ $('fb-warn').hidden = false; $('fb-warn-msg').textContent = msg; }
+
+/* ═══════════════════ NAVIGATION ═══════════════════ */
+function go(id){
+  tab = id;
+  $('tab-student').classList.toggle('on', id==='student');
+  $('tab-admin').classList.toggle('on', id==='admin');
+  $('p-student').classList.toggle('on', id==='student');
+  $('p-admin').classList.toggle('on', id==='admin');
+  $('brand-sub').textContent = id==='admin' ? 'Director tools' : 'Sharon High School';
+  if(id==='student'){ focusScan(); }
+  else{ if(!unlocked) setTimeout(function(){ const c=$('code-input'); if(c) c.focus(); }, 60); else paintAdmin(); }
+}
+
+function goSub(id){
+  sub = id;
+  ['signins','roster','labels','settings'].forEach(function(k){
+    const b = $('sn-'+k); if(b) b.classList.toggle('on', k===id);
+    const p = $('s-'+k); if(p) p.classList.toggle('on', k===id);
+  });
+  paintAdmin();
+}
+
+function paint(){
+  if(tab==='admin' && unlocked) paintAdmin();
+}
+
+function paintAdmin(){
+  if(sub==='signins'){ renderGroupChips('si-groups', siGroup, 'si'); renderSignins(); }
+  if(sub==='roster'){ renderGroups(); renderImportGroups(); renderGroupChips('ros-groups', rosGroup, 'ros'); renderRoster(); }
+  if(sub==='labels'){ renderGroupChips('lb-groups', lbGroup, 'lb'); renderPicker(); }
+  if(sub==='settings'){ renderAbout(); }
+}
+
+/* ═══════════════════ ADMIN LOCK ═══════════════════ */
+function tryUnlock(){
+  const el = $('code-input');
+  const v = (el.value||'').trim();
+  if(!loaded){ $('code-msg').innerHTML = '<div class="note n-warn mt"><i class="ti ti-loader-2"></i><span>Still loading the roster — try again in a moment.</span></div>'; return; }
+  if(v === String(S.adminCode||'0000')){
+    unlocked = true;
+    el.value = '';
+    $('code-msg').innerHTML = '';
+    $('admin-lock').hidden = true;
+    $('admin-body').hidden = false;
+    goSub(sub);
+  }else{
+    el.value = '';
+    el.focus();
+    $('code-msg').innerHTML = '<div class="note n-err mt"><i class="ti ti-alert-circle"></i><span>That code isn\'t right.</span></div>';
+  }
+}
+
+function lockAdmin(){
+  unlocked = false;
+  $('admin-lock').hidden = false;
+  $('admin-body').hidden = true;
+  go('student');
+}
+
+async function changeCode(){
+  const oldV = ($('cc-old').value||'').trim();
+  const a = ($('cc-new').value||'').trim();
+  const b = ($('cc-new2').value||'').trim();
+  if(oldV !== String(S.adminCode||'0000')){ toast('The current code isn\'t right.', 'err'); $('cc-old').focus(); return; }
+  if(!/^\d{4,10}$/.test(a)){ toast('The new code has to be 4 to 10 digits.', 'err'); $('cc-new').focus(); return; }
+  if(a !== b){ toast('The two new codes don\'t match.', 'err'); $('cc-new2').focus(); return; }
+  const ok = await commit(function(){ S.adminCode = a; });
+  if(!ok) return;
+  $('cc-old').value=''; $('cc-new').value=''; $('cc-new2').value='';
+  toast('<b>Code changed.</b> Every computer will need the new one.', 'ok', 4200);
+}
+
+/* ═══════════════════ KIOSK ═══════════════════ */
+function enterKiosk(){
+  document.body.classList.add('kiosk');
+  go('student');
+  const el = document.documentElement;
+  if(el.requestFullscreen) el.requestFullscreen().catch(function(){});
+  focusScan();
+}
+
+async function exitKiosk(){
+  const v = await promptBox('Exit kiosk mode', '', { password:true, ok:'Exit', note:'Enter the admin code.' });
+  if(v === null) return;
+  if(v !== String(S.adminCode||'0000')){ toast('That code isn\'t right.', 'err'); return; }
+  document.body.classList.remove('kiosk');
+  if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function(){});
+  focusScan();
+}
+
+/* ═══════════════════ NUMBERS ═══════════════════ */
+/* Lowest unused number, filling gaps left by deleted students. A number is
+   locked to its person for as long as that person exists; deleting them puts
+   it back in the pool. */
+function freeNums(count){
+  const used = new Set(S.students.map(function(s){ return s.num; }));
+  const out = [];
+  let n = 1;
+  while(out.length < count && n <= 99999){
+    if(!used.has(n)){ out.push(n); used.add(n); }
+    n++;
+  }
+  return out;
+}
+
+function studentByNum(n){
+  return S.students.find(function(s){ return s.num === n; }) || null;
+}
+
+function groupName(id){
+  const g = S.groups.find(function(x){ return x.id===id; });
+  return g ? g.name : '';
+}
+
+function groupsOf(st){
+  return (st.groups||[]).map(groupName).filter(Boolean);
+}
+
+/* ═══════════════════ STUDENT: SCANNING ═══════════════════ */
+let scanTimer = null;
+
+function focusScan(){
+  if(tab !== 'student') return;
+  if(document.querySelector('.ov')) return;
+  const el = $('scan-input');
+  if(el && document.activeElement !== el) el.focus();
+}
+
+function scanKey(e){
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    if(scanTimer){ clearTimeout(scanTimer); scanTimer = null; }
+    submitScan();
+  }
+}
+
+function scanInputEvent(){
+  if(scanTimer){ clearTimeout(scanTimer); scanTimer = null; }
+  const digits = ($('scan-input').value||'').replace(/\D/g,'');
+  /* Most handheld scanners send Enter after the code, but not all are
+     configured that way. Once five digits have landed and the keystrokes
+     stop, treat it as a complete scan. */
+  if(digits.length >= 5){
+    scanTimer = setTimeout(function(){ scanTimer = null; submitScan(); }, 140);
+  }
+}
+
+function submitScan(){
+  const el = $('scan-input');
+  const raw = (el.value||'').trim();
+  el.value = '';
+  el.focus();
+  if(!raw) return;
+  handleScan(raw);
+}
+
+async function handleScan(raw){
+  const digits = String(raw).replace(/\D/g,'');
+  if(!digits){
+    showScan('err', 'ti-alert-circle', 'Not a barcode', 'Nothing readable in that scan. Try again.');
+    return;
+  }
+  if(digits.length > 5){
+    showScan('err', 'ti-alert-circle', 'Not one of ours',
+      'Barcode ' + esc(digits.slice(0,12)) + ' is too long — choir cards are five digits.');
+    return;
+  }
+  const num = parseInt(digits, 10);
+  const st = studentByNum(num);
+  if(!st){
+    showScan('err', 'ti-alert-circle', 'Barcode not recognised',
+      'Card <b>' + code5(num) + '</b> isn\'t on the roster. Ask the director to check it.');
+    return;
+  }
+  const existing = findSignin(st.id);
+  if(existing){
+    showScan('warn', 'ti-clock-check', firstLast(st.name),
+      'Already signed in at <b>' + fmtTime(existing.at) + '</b>.');
+    return;
+  }
+  const stamp = new Date().toISOString();
+  const ok = await commit(function(){ S.signins.push({ id:st.id, at:stamp, manual:false }); });
+  if(!ok){
+    showScan('err', 'ti-alert-circle', 'Didn\'t save',
+      'That scan couldn\'t be stored. Check the connection and scan again.');
+    return;
+  }
+  showScan('ok', 'ti-circle-check', firstLast(st.name), 'Signed in at <b>' + fmtTime(stamp) + '</b>. You\'re all set.');
+}
+
+function showScan(kind, icon, name, sub){
+  const box = $('scan-result');
+  box.innerHTML = '<div class="result r-' + kind + '">' +
+    '<div class="ricon"><i class="ti ' + icon + '"></i></div>' +
+    '<div><div class="rname">' + esc(name) + '</div><div class="rsub">' + sub + '</div></div></div>';
+}
+
+/* ═══════════════════ ADMIN: GROUPS ═══════════════════ */
+function renderGroups(){
+  const el = $('grp-chips'); if(!el) return;
+  if(!S.groups.length){
+    el.innerHTML = '<div class="card-d" style="margin:0">No groups yet. You can import without one, but groups let you filter the sign-in list.</div>';
+    return;
+  }
+  el.innerHTML = S.groups.map(function(g){
+    const n = S.students.filter(function(s){ return (s.groups||[]).indexOf(g.id)>=0; }).length;
+    return '<span class="chip on" style="display:inline-flex;gap:8px;align-items:center">' + esc(g.name) +
+      ' <span style="opacity:.65">· ' + n + '</span>' +
+      '<button class="btn btn-icon btn-sm" style="width:24px;height:24px;padding:0;border:none;background:none" title="Rename" data-grename="' + g.id + '"><i class="ti ti-pencil" style="font-size:14px"></i></button>' +
+      '<button class="btn btn-icon btn-sm" style="width:24px;height:24px;padding:0;border:none;background:none" title="Delete" data-gdel="' + g.id + '"><i class="ti ti-x" style="font-size:14px"></i></button>' +
+      '</span>';
+  }).join('');
+}
+
+async function addGroup(){
+  const el = $('new-group');
+  const name = (el.value||'').trim();
+  if(!name){ el.focus(); return; }
+  if(S.groups.some(function(g){ return norm(g.name)===norm(name); })){ toast('A group with that name already exists.', 'warn'); return; }
+  const ok = await commit(function(){ S.groups.push({ id:uid(), name:name }); });
+  if(!ok) return;
+  el.value = '';
+  paintAdmin();
+  toast('<b>' + esc(name) + '</b> created.', 'ok', 2600);
+}
+
+async function renameGroup(id){
+  const g = S.groups.find(function(x){ return x.id===id; }); if(!g) return;
+  const name = await promptBox('Rename group', g.name);
+  if(name === null || !name) return;
+  await commit(function(){ g.name = name; });
+  paintAdmin();
+}
+
+async function deleteGroup(id){
+  const g = S.groups.find(function(x){ return x.id===id; }); if(!g) return;
+  const n = S.students.filter(function(s){ return (s.groups||[]).indexOf(id)>=0; }).length;
+  const okGo = await confirmBox('Delete the group "' + g.name + '"?\n\nThe ' + n + ' student' + (n===1?'':'s') +
+    ' in it stay on the roster and keep their barcodes — they just stop being grouped.', 'Delete group');
+  if(!okGo) return;
+  const ok = await commit(function(){
+    S.groups = S.groups.filter(function(x){ return x.id!==id; });
+    S.students.forEach(function(s){ s.groups = (s.groups||[]).filter(function(x){ return x!==id; }); });
+  });
+  if(!ok) return;
+  if(siGroup===id) siGroup='all';
+  if(rosGroup===id) rosGroup='all';
+  if(lbGroup===id) lbGroup='all';
+  impGroups.delete(id);
+  paintAdmin();
+  toast('Group deleted.', 'ok', 2400);
+}
+
+/* filter chips shared by the three lists */
+function renderGroupChips(elId, active, which){
+  const el = $(elId); if(!el) return;
+  let html = '<button class="chip' + (active==='all'?' on':'') + '" data-gf="' + which + '" data-v="all">All groups</button>';
+  html += S.groups.map(function(g){
+    return '<button class="chip' + (active===g.id?' on':'') + '" data-gf="' + which + '" data-v="' + g.id + '">' + esc(g.name) + '</button>';
+  }).join('');
+  const ungrouped = S.students.filter(function(s){ return !(s.groups||[]).length; }).length;
+  if(ungrouped) html += '<button class="chip' + (active==='none'?' on':'') + '" data-gf="' + which + '" data-v="none">No group · ' + ungrouped + '</button>';
+  el.innerHTML = html;
+}
+
+function inGroup(st, filter){
+  if(filter === 'all') return true;
+  if(filter === 'none') return !(st.groups||[]).length;
+  return (st.groups||[]).indexOf(filter) >= 0;
+}
+
+function renderImportGroups(){
+  const el = $('imp-groups'); if(!el) return;
+  if(!S.groups.length){
+    el.innerHTML = '<div class="card-d" style="margin:0">No groups yet — create one above if you want to sort people.</div>';
+    return;
+  }
+  el.innerHTML = S.groups.map(function(g){
+    return '<button class="chip' + (impGroups.has(g.id)?' on':'') + '" data-impg="' + g.id + '">' +
+      (impGroups.has(g.id) ? '<i class="ti ti-check" style="font-size:13px"></i> ' : '') + esc(g.name) + '</button>';
+  }).join('');
+}
+
+/* ═══════════════════ ADMIN: IMPORT ═══════════════════ */
+function clearImport(){
+  $('imp-text').value = '';
+  $('imp-preview').innerHTML = '';
+  pendingImport = null;
+}
+
+function previewImport(){
+  const lines = ($('imp-text').value||'').split('\n').map(function(l){ return tidyName(l); }).filter(Boolean);
+  const box = $('imp-preview');
+  if(!lines.length){
+    box.innerHTML = '<div class="note n-err mt"><i class="ti ti-alert-circle"></i><span>Paste some names first.</span></div>';
+    pendingImport = null;
+    return;
+  }
+  const targets = Array.from(impGroups);
+  const seenInPaste = new Set();
+  const fresh = [], dupes = [], repeats = [];
+
+  lines.forEach(function(name){
+    const key = norm(name);
+    if(seenInPaste.has(key)){ repeats.push(name); return; }
+    seenInPaste.add(key);
+    const existing = S.students.find(function(s){ return norm(s.name)===key; });
+    if(existing) dupes.push({ name:name, id:existing.id, num:existing.num });
+    else fresh.push({ name:name, key:key, separate:false });
+  });
+
+  pendingImport = { fresh:fresh, dupes:dupes, targets:targets };
+  drawImportPreview();
+}
+
+function drawImportPreview(){
+  const p = pendingImport;
+  if(!p) return;
+  const box = $('imp-preview');
+  const nums = freeNums(p.fresh.length);
+  const targetNames = p.targets.map(groupName).filter(Boolean);
+
+  let html = '<div class="note n-info mt" style="display:block"><b>Here\'s what will happen</b>';
+  html += '<ul style="margin:8px 0 0 18px;line-height:1.7">';
+  html += '<li><b>' + p.fresh.length + '</b> new student' + (p.fresh.length===1?'':'s') + ' will be added';
+  if(p.fresh.length) html += ' and given barcode' + (p.fresh.length===1?' ':'s ') +
+    '<span class="mono">' + code5(nums[0]) + '</span>' +
+    (p.fresh.length>1 ? ' – <span class="mono">' + code5(nums[nums.length-1]) + '</span>' : '');
+  html += '</li>';
+  html += '<li><b>' + p.dupes.length + '</b> already ' + (p.dupes.length===1?'has a barcode':'have barcodes') + ' and will be skipped' +
+    (targetNames.length && p.dupes.length ? ' — but they will be added to ' + esc(targetNames.join(' and ')) : '') + '</li>';
+  if(targetNames.length) html += '<li>Everyone imported joins <b>' + esc(targetNames.join(' and ')) + '</b></li>';
+  else html += '<li>No group selected — they\'ll go on the roster ungrouped</li>';
+  html += '</ul></div>';
+
+  if(p.dupes.length){
+    html += '<div class="note n-warn mt" style="display:block"><b>Skipped — already on the roster (' + p.dupes.length + ')</b>' +
+      '<div class="card-d" style="margin:6px 0 0">If one of these is genuinely a different person with the same name, add something to tell them apart. Otherwise leave it alone.</div>' +
+      '<div style="margin-top:8px">' + p.dupes.map(function(d, i){
+        return '<div class="item"><div class="item-main"><div class="item-t" style="font-weight:400">' + esc(d.name) + '</div>' +
+          '<div class="item-s">holds <span class="mono">' + code5(d.num) + '</span></div></div>' +
+          '<button class="btn btn-sm" data-sep="' + i + '"><i class="ti ti-user-plus"></i> Different person</button></div>';
+      }).join('') + '</div></div>';
+  }
+
+  if(p.fresh.length){
+    html += '<div class="note n-ok mt" style="display:block"><b>New (' + p.fresh.length + ')</b>' +
+      '<div style="margin-top:8px;max-height:240px;overflow-y:auto">' + p.fresh.map(function(f, i){
+        return '<div class="item"><div class="item-main"><div class="item-t" style="font-weight:400">' + esc(f.name) + '</div></div>' +
+          '<span class="mono">' + code5(nums[i]) + '</span></div>';
+      }).join('') + '</div></div>';
+  }
+
+  html += '<div class="row" style="margin-top:14px">' +
+    '<button class="btn btn-primary" onclick="commitImport()"><i class="ti ti-check"></i> Import ' +
+    p.fresh.length + ' new student' + (p.fresh.length===1?'':'s') + '</button>' +
+    '<button class="btn btn-sm" onclick="clearImport()"><i class="ti ti-x"></i> Cancel</button></div>';
+
+  box.innerHTML = html;
+}
+
+/* Turns a skipped duplicate into a genuinely separate person, once the
+   director gives them a distinguishing name. */
+async function separatePerson(i){
+  const p = pendingImport; if(!p) return;
+  const d = p.dupes[i]; if(!d) return;
+  const newName = await promptBox('Tell these two apart', d.name, {
+    note: 'Add a middle initial or something similar. It has to be different from the name already on the roster.',
+    ok: 'Add as new person'
+  });
+  if(newName === null || !newName) return;
+  const tidy = tidyName(newName);
+  if(norm(tidy) === norm(d.name)){ toast('That\'s the same name — change it so the two can be told apart.', 'warn', 4600); return; }
+  if(S.students.some(function(s){ return norm(s.name)===norm(tidy); }) ||
+     p.fresh.some(function(f){ return norm(f.name)===norm(tidy); })){
+    toast('Someone on the roster already has that name.', 'err'); return;
+  }
+  p.dupes.splice(i,1);
+  p.fresh.push({ name:tidy, key:norm(tidy), separate:true });
+  drawImportPreview();
+}
+
+async function commitImport(){
+  const p = pendingImport;
+  if(!p){ toast('Preview the import first.', 'warn'); return; }
+  if(!p.fresh.length && !p.targets.length){
+    toast('Nothing to do — every name already has a barcode and no group was selected.', 'warn', 4600);
+    return;
+  }
+  const nums = freeNums(p.fresh.length);
+  const added = p.fresh.length;
+  const joined = p.dupes.length;
+
+  const ok = await commit(function(){
+    p.fresh.forEach(function(f, i){
+      S.students.push({ id:uid(), name:f.name, num:nums[i], groups:p.targets.slice() });
+    });
+    /* Skipped names keep their existing barcode, but still join the group
+       this list was imported into. */
+    p.dupes.forEach(function(d){
+      const st = S.students.find(function(s){ return s.id===d.id; });
+      if(!st) return;
+      st.groups = st.groups || [];
+      p.targets.forEach(function(g){ if(st.groups.indexOf(g)<0) st.groups.push(g); });
+    });
+  });
+  if(!ok) return;
+
+  clearImport();
+  paintAdmin();
+  toast('<b>Imported ' + added + '</b> new student' + (added===1?'':'s') +
+    (joined ? ' · ' + joined + ' already had barcodes' : '') + '.', 'ok', 4600);
+}
+
+/* ═══════════════════ ADMIN: ROSTER ═══════════════════ */
+function rosterRows(filter, search){
+  const q = norm(search||'');
+  return S.students
+    .filter(function(s){ return inGroup(s, filter); })
+    .filter(function(s){ return !q || norm(s.name).indexOf(q) >= 0 || code5(s.num).indexOf(q) >= 0; })
+    .sort(function(a,b){ return a.name.localeCompare(b.name); });
+}
+
+function renderRoster(){
+  const el = $('ros-list'); if(!el) return;
+  const rows = rosterRows(rosGroup, $('ros-search') ? $('ros-search').value : '');
+  if(!rows.length){
+    el.innerHTML = S.students.length
+      ? '<div class="empty"><i class="ti ti-user-search"></i>Nobody matches that.</div>'
+      : '<div class="empty"><i class="ti ti-users"></i>Nobody on the roster yet.<br>Paste a list of names above to get started.</div>';
+    return;
+  }
+  el.innerHTML = rows.map(function(s){
+    const gs = groupsOf(s);
+    return '<div class="item">' +
+      '<span class="mono">' + code5(s.num) + '</span>' +
+      '<div class="item-main"><div class="item-t">' + esc(s.name) + '</div>' +
+      '<div class="item-s">' + (gs.length
+        ? gs.map(function(g){ return '<span class="pill p-plum">' + esc(g) + '</span>'; }).join('')
+        : '<span style="color:var(--muted)">No group</span>') + '</div></div>' +
+      '<button class="btn btn-icon btn-sm" title="Edit" data-edit="' + s.id + '"><i class="ti ti-pencil"></i></button>' +
+      '<button class="btn btn-icon btn-sm btn-danger" title="Delete" data-del="' + s.id + '"><i class="ti ti-trash"></i></button>' +
+      '</div>';
+  }).join('');
+}
+
+function editStudent(id){
+  const st = S.students.find(function(s){ return s.id===id; }); if(!st) return;
+  const ov = document.createElement('div'); ov.className='ov';
+  ov.innerHTML = '<div class="modal"><h3>Edit student</h3>' +
+    '<p style="margin-bottom:14px">Barcode <span class="mono">' + code5(st.num) + '</span> stays with them whatever you change here.</p>' +
+    '<div class="field" style="margin-bottom:14px"><label for="es-name">Name (Last, First)</label>' +
+    '<input type="text" id="es-name" value="' + esc(st.name) + '"></div>' +
+    '<div class="lbl" style="margin-bottom:6px">Groups</div>' +
+    '<div id="es-groups">' + (S.groups.length
+      ? S.groups.map(function(g){
+          return '<label class="check"><input type="checkbox" value="' + g.id + '"' +
+            ((st.groups||[]).indexOf(g.id)>=0 ? ' checked' : '') + '><span class="cn">' + esc(g.name) + '</span></label>';
+        }).join('')
+      : '<div class="card-d" style="margin:0">No groups exist yet.</div>') + '</div>' +
+    '<div class="modal-acts"><button class="btn" data-x>Cancel</button>' +
+    '<button class="btn btn-primary" data-y><i class="ti ti-check"></i> Save</button></div></div>';
+  document.body.appendChild(ov);
+  const close = function(){ ov.remove(); };
+  ov.querySelector('[data-x]').onclick = close;
+  ov.onclick = function(e){ if(e.target===ov) close(); };
+  ov.querySelector('[data-y]').onclick = async function(){
+    const name = tidyName($('es-name').value);
+    if(!name){ toast('A name is required.', 'warn'); return; }
+    const clash = S.students.some(function(s){ return s.id!==id && norm(s.name)===norm(name); });
+    if(clash){ toast('Someone else on the roster already has that name.', 'err', 4600); return; }
+    const groups = Array.prototype.slice.call(ov.querySelectorAll('#es-groups input:checked')).map(function(c){ return c.value; });
+    const ok = await commit(function(){ st.name = name; st.groups = groups; });
+    if(!ok) return;
+    close();
+    paintAdmin();
+    toast('Saved.', 'ok', 2200);
+  };
+}
+
+async function deleteStudent(id){
+  const st = S.students.find(function(s){ return s.id===id; }); if(!st) return;
+  const here = !!findSignin(st.id);
+  const okGo = await confirmBox('Delete "' + st.name + '"?\n\n' +
+    '• They come off the roster\n' +
+    '• Barcode ' + code5(st.num) + ' goes back in the pool and can be given to someone else later\n' +
+    (here ? '• Their sign-in for today is removed\n' : '') +
+    '\nAny card already printed for them will stop working.', 'Delete');
+  if(!okGo) return;
+  const ok = await commit(function(){
+    S.students = S.students.filter(function(s){ return s.id!==id; });
+    removeSignin(id);
+  });
+  if(!ok) return;
+  picked.delete(id);
+  paintAdmin();
+  toast('<b>' + esc(st.name) + '</b> deleted — barcode ' + code5(st.num) + ' is free again.', 'ok', 4200);
+}
+
+async function deleteAllStudents(){
+  const n = S.students.length;
+  if(!n){ toast('There\'s nobody to delete.', 'warn'); return; }
+  const okGo = await confirmBox('Delete all ' + n + ' students?\n\n' +
+    'Every barcode goes back in the pool, every sign-in is cleared, and every printed card stops working. ' +
+    'Your groups are kept.\n\nThis cannot be undone — download a backup first if you\'re not certain.',
+    'Delete all ' + n);
+  if(!okGo) return;
+  const typed = await promptBox('Type DELETE to confirm', '', { ok:'Delete everyone' });
+  if(typed === null) return;
+  if(String(typed).trim().toUpperCase() !== 'DELETE'){ toast('Not deleted — the confirmation didn\'t match.', 'warn'); return; }
+  const ok = await commit(function(){ S.students = []; S.signins = []; });
+  if(!ok) return;
+  picked.clear();
+  paintAdmin();
+  toast('<b>Roster cleared.</b> All barcode numbers are free again.', 'ok', 4600);
+}
+
+/* ═══════════════════ ADMIN: WHO'S HERE ═══════════════════ */
+function setSort(m){
+  sortMode = m;
+  $('sort-name').classList.toggle('on', m==='name');
+  $('sort-time').classList.toggle('on', m==='time');
+  renderSignins();
+}
+
+function signinRows(){
+  const q = norm($('si-search') ? $('si-search').value : '');
+  let rows = S.students
+    .filter(function(s){ return inGroup(s, siGroup); })
+    .filter(function(s){ return !q || norm(s.name).indexOf(q) >= 0 || code5(s.num).indexOf(q) >= 0; })
+    .map(function(s){
+      const rec = findSignin(s.id);
+      return { st:s, at: rec ? rec.at : null, manual: rec ? !!rec.manual : false };
+    });
+
+  if(sortMode === 'name'){
+    rows.sort(function(a,b){ return a.st.name.localeCompare(b.st.name); });
+  }else{
+    /* Earliest arrival first; everyone still to come sits at the bottom in
+       alphabetical order, so the list doubles as the absent list. */
+    rows.sort(function(a,b){
+      if(a.at && b.at) return new Date(a.at) - new Date(b.at);
+      if(a.at) return -1;
+      if(b.at) return 1;
+      return a.st.name.localeCompare(b.st.name);
+    });
+  }
+  return rows;
+}
+
+function renderSignins(){
+  const el = $('si-list'); if(!el) return;
+  const rows = signinRows();
+  const scope = S.students.filter(function(s){ return inGroup(s, siGroup); });
+  const inCount = scope.filter(function(s){ return !!findSignin(s.id); }).length;
+
+  $('si-metrics').innerHTML = [
+    ['ti-user-check', inCount, 'Signed in'],
+    ['ti-user-question', scope.length - inCount, 'Not yet'],
+    ['ti-users', scope.length, 'On the roster']
+  ].map(function(m){
+    return '<div class="metric"><i class="ti ' + m[0] + '"></i><b>' + m[1] + '</b><span>' + m[2] + '</span></div>';
+  }).join('');
+
+  if(!rows.length){
+    el.innerHTML = S.students.length
+      ? '<div class="empty"><i class="ti ti-user-search"></i>Nobody matches that.</div>'
+      : '<div class="empty"><i class="ti ti-users"></i>Nobody on the roster yet.<br>Import some names from the Roster tab.</div>';
+    return;
+  }
+
+  el.innerHTML = rows.map(function(r){
+    const gs = groupsOf(r.st);
+    return '<div class="item">' +
+      '<span class="mono">' + code5(r.st.num) + '</span>' +
+      '<div class="item-main"><div class="item-t">' + esc(r.st.name) + '</div>' +
+      '<div class="item-s">' +
+        (r.at ? '<span>' + fmtTime(r.at) + '</span>' : '<span style="color:var(--muted)">Not checked in</span>') +
+        (r.manual ? '<span class="pill p-mut">by hand</span>' : '') +
+        gs.map(function(g){ return '<span class="pill p-plum">' + esc(g) + '</span>'; }).join('') +
+      '</div></div>' +
+      (r.at ? '<span class="pill p-in">Present</span>' : '<span class="pill p-out">Out</span>') +
+      '<button class="btn btn-sm" data-mark="' + r.st.id + '">' +
+        (r.at ? '<i class="ti ti-user-minus"></i> Sign out' : '<i class="ti ti-user-check"></i> Mark in') + '</button>' +
+      '</div>';
+  }).join('');
+}
+
+async function toggleMark(id){
+  const st = S.students.find(function(s){ return s.id===id; }); if(!st) return;
+  const here = !!findSignin(id);
+  const ok = await commit(function(){
+    if(here) removeSignin(id);
+    else setSignin(id, true);
+  });
+  if(!ok) return;
+  renderSignins();
+  toast(here ? esc(st.name) + ' signed out.' : '<b>' + esc(st.name) + '</b> marked present.', 'ok', 2400);
+}
+
+function csvCell(v){
+  const t = String(v == null ? '' : v);
+  return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g,'""') + '"' : t;
+}
+
+function exportSignins(){
+  const rows = signinRows();
+  if(!rows.length){ toast('Nothing to export.', 'warn'); return; }
+  const scopeLabel = siGroup==='all' ? 'All groups' : (siGroup==='none' ? 'No group' : groupName(siGroup));
+  const out = [['Name','Barcode','Groups','Status','Signed in at','Marked by hand']];
+  rows.forEach(function(r){
+    out.push([
+      r.st.name,
+      code5(r.st.num),
+      groupsOf(r.st).join('; '),
+      r.at ? 'Present' : 'Not checked in',
+      r.at ? fmtDateTime(r.at) : '',
+      r.manual ? 'Yes' : ''
+    ]);
+  });
+  /* Leading BOM so Sheets and Excel read accented names correctly. */
+  const csv = '\uFEFF' + out.map(function(r){ return r.map(csvCell).join(','); }).join('\r\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'choir-signin-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+  toast('<b>Exported ' + rows.length + ' rows</b> — ' + esc(scopeLabel) + '. Open it in Sheets with File &rsaquo; Import.', 'ok', 5200);
+}
+
+async function clearSignins(){
+  const scope = S.students.filter(function(s){ return inGroup(s, siGroup); });
+  const ids = scope.filter(function(s){ return !!findSignin(s.id); }).map(function(s){ return s.id; });
+  if(!ids.length){ toast('Nobody is signed in right now.', 'warn'); return; }
+  const scopeLabel = siGroup==='all' ? 'everyone' : ('everyone in ' + (siGroup==='none' ? 'no group' : groupName(siGroup)));
+  const okGo = await confirmBox('Sign out ' + scopeLabel + '?\n\n' + ids.length + ' sign-in' + (ids.length===1?'':'s') +
+    ' will be cleared and there is no history kept afterwards.\n\nExport the spreadsheet first if you want the record.',
+    'Clear ' + ids.length);
+  if(!okGo) return;
+  const idSet = new Set(ids);
+  const ok = await commit(function(){
+    S.signins = S.signins.filter(function(r){ return !idSet.has(r.id); });
+  });
+  if(!ok) return;
+  renderSignins();
+  toast('<b>Cleared ' + ids.length + ' sign-in' + (ids.length===1?'':'s') + '.</b> Everyone is signed out.', 'ok', 4000);
+}
+
+/* ═══════════════════ ADMIN: BARCODE LABELS ═══════════════════ */
+/* Sheet geometry — Avery 5167 / 8167 style, 1.75" x 0.5", 80 per 8.5x11 sheet.
+   Identical to the score library so the same label stock works for both. */
+const SHEET = { w:8.5, h:11, cols:4, rows:20, lw:1.75, lh:0.5, ml:0.3, mt:0.5, px:2.0625, py:0.5 };
+const PER_SHEET = SHEET.cols * SHEET.rows;
+
+function barcodeSVG(value){
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  try{
+    JsBarcode(svg, value, { format:'CODE128', width:1, height:40, displayValue:false, margin:0, background:'#ffffff', lineColor:'#000000' });
+    const w = parseFloat(svg.getAttribute('width')), h = parseFloat(svg.getAttribute('height'));
+    if(w > 0 && h > 0){
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      svg.setAttribute('preserveAspectRatio','none');
+      svg.removeAttribute('width'); svg.removeAttribute('height');
+    }
+  }catch(e){
+    svg.setAttribute('viewBox','0 0 100 40');
+    svg.innerHTML = '<rect width="100" height="40" fill="#fff"/><text x="4" y="26" font-size="12" fill="#c00">bad code</text>';
+  }
+  return svg;
+}
+
+function pickerRows(){
+  const q = norm($('lb-search') ? $('lb-search').value : '');
+  return S.students
+    .filter(function(s){ return inGroup(s, lbGroup); })
+    .filter(function(s){ return !q || norm(s.name).indexOf(q) >= 0 || code5(s.num).indexOf(q) >= 0; })
+    .sort(function(a,b){ return a.name.localeCompare(b.name); });
+}
+
+function renderPicker(){
+  const el = $('lb-list'); if(!el) return;
+  const rows = pickerRows();
+  if(!rows.length){
+    el.innerHTML = S.students.length
+      ? '<div class="empty"><i class="ti ti-user-search"></i>Nobody matches that.</div>'
+      : '<div class="empty"><i class="ti ti-users"></i>Nobody on the roster yet.</div>';
+  }else{
+    el.innerHTML = rows.map(function(s){
+      return '<label class="check"><input type="checkbox" data-pick="' + s.id + '"' + (picked.has(s.id)?' checked':'') + '>' +
+        '<span class="mono">' + code5(s.num) + '</span>' +
+        '<span class="cn">' + esc(s.name) + '</span></label>';
+    }).join('');
+  }
+  renderLabelSummary();
+}
+
+function pickAll(on){
+  pickerRows().forEach(function(s){ if(on) picked.add(s.id); else picked.delete(s.id); });
+  renderPicker();
+}
+
+function pickedStudents(){
+  return S.students.filter(function(s){ return picked.has(s.id); })
+    .sort(function(a,b){ return a.num - b.num; });
+}
+
+function renderLabelSummary(){
+  const list = pickedStudents();
+  const cnt = $('lb-count');
+  if(cnt) cnt.textContent = list.length ? (list.length + ' selected') : 'None selected';
+  const box = $('lb-summary');
+  if(!box) return;
+  if(!list.length){
+    box.innerHTML = '<div class="note n-info mt"><i class="ti ti-info-circle"></i><span>Pick at least one student above.</span></div>';
+    $('lb-prev-card').hidden = true;
+    return;
+  }
+  const start = Math.min(Math.max(parseInt($('lb-start').value,10)||1,1),PER_SHEET);
+  const sheets = Math.ceil((list.length + start - 1) / PER_SHEET);
+  box.innerHTML = '<div class="note n-info mt"><i class="ti ti-file-stack"></i><span><b>' + list.length +
+    '</b> label' + (list.length===1?'':'s') + ' · <b>' + sheets + '</b> sheet' + (sheets===1?'':'s') +
+    (start>1 ? ' · starting at position ' + start : '') + '</span></div>';
+  renderLabelPreview(list);
+}
+
+function renderLabelPreview(list){
+  const show = list.slice(0,8);
+  $('lb-prev-card').hidden = !show.length;
+  $('lb-prev-count').textContent = list.length > show.length
+    ? ('(first ' + show.length + ' of ' + list.length + ', actual size)')
+    : '(actual size)';
+  const grid = $('lb-prev-grid');
+  grid.innerHTML = '';
+  show.forEach(function(s){
+    const d = document.createElement('div');
+    d.className = 'lbl-card';
+    const n = document.createElement('div'); n.className='ln'; n.textContent = code5(s.num);
+    const svg = barcodeSVG(code5(s.num));
+    svg.style.width = '1.55in'; svg.style.height = '0.21in'; svg.style.display='block';
+    const nm = document.createElement('div'); nm.className='lname'; nm.textContent = s.name;
+    d.append(n, svg, nm);
+    grid.appendChild(d);
+  });
+}
+
+function buildSheetHTML(){
+  const list = pickedStudents();
+  if(!list.length) return null;
+  const start = Math.min(Math.max(parseInt($('lb-start').value,10)||1,1),PER_SHEET);
+  const offX = parseFloat($('lb-offx').value) || 0;
+  const offY = parseFloat($('lb-offy').value) || 0;
+
+  const slots = [];
+  for(let i=0;i<start-1;i++) slots.push(null);
+  list.forEach(function(s){ slots.push(s); });
+
+  let sheets = '';
+  for(let p=0; p*PER_SHEET < slots.length; p++){
+    const page = slots.slice(p*PER_SHEET, (p+1)*PER_SHEET);
+    let inner = '';
+    page.forEach(function(s, idx){
+      if(!s) return;
+      const col = idx % SHEET.cols, row = Math.floor(idx / SHEET.cols);
+      const left = (SHEET.ml + col*SHEET.px + offX).toFixed(4);
+      const top  = (SHEET.mt + row*SHEET.py + offY).toFixed(4);
+      const svg = barcodeSVG(code5(s.num));
+      svg.setAttribute('class','bcs');
+      inner += '<div class="lab" style="left:' + left + 'in;top:' + top + 'in">' +
+        '<div class="ln">' + code5(s.num) + '</div>' + svg.outerHTML +
+        '<div class="lname">' + esc(s.name) + '</div></div>';
+    });
+    sheets += '<div class="sheet">' + inner + '</div>';
+  }
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Choir sign-in barcodes</title><style>' +
+'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+'body{background:#fff;font-family:Arial,Helvetica,sans-serif}' +
+'@page{size:8.5in 11in;margin:0}' +
+'.sheet{position:relative;width:8.5in;height:11in;overflow:hidden;page-break-after:always;break-after:page}' +
+'.sheet:last-child{page-break-after:auto;break-after:auto}' +
+'.lab{position:absolute;width:1.75in;height:.5in;overflow:hidden;display:flex;flex-direction:column;' +
+'align-items:center;justify-content:center;padding:.01in .05in;text-align:center}' +
+'.ln{font-family:"Courier New",monospace;font-size:4.6pt;line-height:1;color:#111}' +
+'.bcs{width:1.55in;height:.21in;display:block;margin:.012in 0}' +
+'.lname{font-size:4.6pt;font-weight:bold;line-height:1.05;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}' +
+'@media screen{body{background:#eee;padding:14px}.sheet{background:#fff;margin:0 auto 14px;box-shadow:0 2px 10px rgba(0,0,0,.2)}}' +
+'</style></head><body>' + sheets + '</body></html>';
+}
+
+function printLabels(){
+  const html = buildSheetHTML();
+  if(!html){ toast('Pick at least one student first.', 'warn'); return; }
+  const f = $('printframe');
+  f.srcdoc = html;
+  f.onload = function(){
+    try{
+      f.contentWindow.focus();
+      f.contentWindow.print();
+    }catch(e){
+      console.error(e);
+      toast('Your browser blocked printing here — use "Download instead".', 'warn', 5200);
+    }
+  };
+}
+
+function downloadLabels(){
+  const html = buildSheetHTML();
+  if(!html){ toast('Pick at least one student first.', 'warn'); return; }
+  const blob = new Blob([html], { type:'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'choir-signin-barcodes-' + new Date().toISOString().slice(0,10) + '.html';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+  toast('Downloaded. Open the file and press Cmd + P.', 'ok', 5000);
+}
+
+/* ═══════════════════ BACKUP ═══════════════════ */
+function backupDownload(){
+  const data = {
+    app: 'choir-sign-in',
+    version: 1,
+    savedAt: new Date().toISOString(),
+    students: S.students,
+    groups: S.groups,
+    signins: S.signins,
+    adminCode: S.adminCode
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'choir-sign-in-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+  toast('<b>Backup downloaded</b> — ' + S.students.length + ' students.', 'ok', 4000);
+}
+
+function backupRestore(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(){
+    let data;
+    try{ data = JSON.parse(reader.result); }
+    catch(e){ toast('That file isn\'t a readable backup.', 'err', 5000); return; }
+    if(!data || data.app !== 'choir-sign-in' || !Array.isArray(data.students)){
+      toast('That doesn\'t look like a Choir Sign In backup.', 'err', 5000);
+      return;
+    }
+    const okGo = await confirmBox('Restore this backup?\n\n' +
+      'Saved ' + fmtDateTime(data.savedAt) + '\n' +
+      data.students.length + ' students · ' + (data.groups||[]).length + ' groups\n\n' +
+      'Everything currently stored — all ' + S.students.length + ' students and their barcodes — is replaced.',
+      'Restore');
+    if(!okGo) return;
+    const ok = await commit(function(){
+      S.students = data.students || [];
+      S.groups = data.groups || [];
+      S.signins = data.signins || [];
+      if(data.adminCode) S.adminCode = data.adminCode;
+      migrate();
+    });
+    if(!ok) return;
+    picked.clear();
+    paintAdmin();
+    toast('<b>Restored.</b> ' + S.students.length + ' students are back.', 'ok', 4600);
+  };
+  reader.readAsText(file);
+}
+
+function renderAbout(){
+  const el = $('about-text'); if(!el) return;
+  const total = S.students.length;
+  const used = total ? Math.max.apply(null, S.students.map(function(s){ return s.num; })) : 0;
+  el.innerHTML = 'Choir Sign In · ' + total + ' student' + (total===1?'':'s') + ' · ' +
+    S.groups.length + ' group' + (S.groups.length===1?'':'s') + ' · highest barcode in use ' +
+    '<span class="mono">' + code5(used) + '</span>.<br>' +
+    'Data lives in the Firestore project <span class="mono">choir-sign-in</span>, document ' +
+    '<span class="mono">signin/state</span>. There is no login — every computer that opens this page ' +
+    'sees the same roster.';
+}
+
+/* ═══════════════════ EVENT DELEGATION ═══════════════════ */
+/* Bound once to containers that survive re-renders. */
+document.addEventListener('click', function(e){
+  const gf = e.target.closest('[data-gf]');
+  if(gf){
+    const which = gf.dataset.gf, v = gf.dataset.v;
+    if(which==='si'){ siGroup = v; renderGroupChips('si-groups', siGroup, 'si'); renderSignins(); }
+    if(which==='ros'){ rosGroup = v; renderGroupChips('ros-groups', rosGroup, 'ros'); renderRoster(); }
+    if(which==='lb'){ lbGroup = v; renderGroupChips('lb-groups', lbGroup, 'lb'); renderPicker(); }
+    return;
+  }
+  const ig = e.target.closest('[data-impg]');
+  if(ig){
+    const id = ig.dataset.impg;
+    if(impGroups.has(id)) impGroups.delete(id); else impGroups.add(id);
+    renderImportGroups();
+    if(pendingImport){ pendingImport.targets = Array.from(impGroups); drawImportPreview(); }
+    return;
+  }
+  const gr = e.target.closest('[data-grename]');
+  if(gr){ renameGroup(gr.dataset.grename); return; }
+  const gd = e.target.closest('[data-gdel]');
+  if(gd){ deleteGroup(gd.dataset.gdel); return; }
+  const ed = e.target.closest('[data-edit]');
+  if(ed){ editStudent(ed.dataset.edit); return; }
+  const dl = e.target.closest('[data-del]');
+  if(dl){ deleteStudent(dl.dataset.del); return; }
+  const mk = e.target.closest('[data-mark]');
+  if(mk){ toggleMark(mk.dataset.mark); return; }
+  const sp = e.target.closest('[data-sep]');
+  if(sp){ separatePerson(parseInt(sp.dataset.sep,10)); return; }
+});
+
+document.addEventListener('change', function(e){
+  const p = e.target.closest('[data-pick]');
+  if(p){
+    const id = p.dataset.pick;
+    if(p.checked) picked.add(id); else picked.delete(id);
+    renderLabelSummary();
+  }
+});
+
+/* Clicking anywhere on the student screen puts the cursor back in the scan
+   box — a scanner types into whatever has focus, so losing it would silently
+   drop scans. */
+$('p-student').addEventListener('click', function(e){
+  if(e.target.closest('button')) return;
+  focusScan();
+});
+$('scan-input').addEventListener('keydown', scanKey);
+$('scan-input').addEventListener('input', scanInputEvent);
+setInterval(focusScan, 1200);
+
+window.addEventListener('beforeunload', function(e){
+  if(saving){ e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ═══════════════════ BOOT ═══════════════════ */
+setConn('', 'Connecting…');
+listen();
+go('student');
+</script>
+</body>
+</html>
